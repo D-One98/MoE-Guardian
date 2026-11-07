@@ -1,14 +1,24 @@
-import React from 'react';
-import type { AuditResponse } from '../../types/contracts';
+import React, { useState } from 'react';
+import type {
+    AuditResponse,
+    ComplianceExportResponse,
+    SnapshotVerificationResponse,
+} from '../../types/contracts';
 import type { NavRoute } from '../layout/Sidebar';
+import {
+    exportAuditComplianceService,
+    verifySnapshotService,
+} from '../../services/auditService';
 import { AuditStatusBadge } from '../ui/Badge';
 import {
     FileCheck2,
     Download,
+    ShieldCheck,
     ShieldAlert,
     Lock,
     Cpu,
     ArrowLeft,
+    CheckCircle2,
 } from 'lucide-react';
 
 interface AuditRecordsViewProps {
@@ -19,31 +29,45 @@ interface AuditRecordsViewProps {
 
 export const AuditRecordsView: React.FC<AuditRecordsViewProps> = ({
     audit,
-    isMockMode,
     onNavigate,
 }) => {
     const snap = audit.latest_snapshot;
+    const [verificationResult, setVerificationResult] =
+        useState<SnapshotVerificationResponse | null>(null);
+    const [exportData, setExportData] =
+        useState<ComplianceExportResponse | null>(null);
+    const [isVerifying, setIsVerifying] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
 
-    const handleExportRecord = () => {
-        const payload = {
-            audit_id: audit.audit_id,
-            org_id: audit.org_id,
-            campaign_id: audit.campaign_id,
-            overall_status: audit.overall_status,
-            document_revision_hash: audit.document_revision_hash,
-            latest_snapshot: audit.latest_snapshot,
-            ai_disclosure_log: audit.ai_disclosure_log,
-            exported_at_utc: new Date().toISOString(),
-        };
-        const blob = new Blob([JSON.stringify(payload, null, 2)], {
-            type: 'application/json',
-        });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${audit.audit_id}_audit_record.json`;
-        a.click();
-        URL.revokeObjectURL(url);
+    // Section 13.1: Call GET /api/audits/{audit_id}/verify-snapshot
+    const handleVerifySnapshot = async () => {
+        setIsVerifying(true);
+        try {
+            const res = await verifySnapshotService(audit);
+            setVerificationResult(res);
+        } finally {
+            setIsVerifying(false);
+        }
+    };
+
+    // Section 14.1: Call GET /api/audits/{audit_id}/export
+    const handleExportRecord = async () => {
+        setIsExporting(true);
+        try {
+            const exported = await exportAuditComplianceService(audit);
+            setExportData(exported);
+            const blob = new Blob([JSON.stringify(exported, null, 2)], {
+                type: 'application/json',
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${audit.audit_id}_compliance_export.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     return (
@@ -54,14 +78,16 @@ export const AuditRecordsView: React.FC<AuditRecordsViewProps> = ({
                     <div className="flex items-center gap-2 text-xs font-mono text-zinc-400">
                         <span>Tamper-Evident Audit Record</span>
                         <span>•</span>
-                        <span>Audit ID: <strong className="text-zinc-100">{audit.audit_id}</strong></span>
+                        <span>
+                            Audit ID: <strong className="text-zinc-100">{audit.audit_id}</strong>
+                        </span>
                     </div>
                     <h2 className="text-base font-semibold text-zinc-100 tracking-tight">
-                        Audit Snapshot Lineage, HMAC Signature & AI Disclosure Log
+                        Audit Snapshot Verification, Simulated CMS Export & AI Disclosure Log
                     </h2>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                     <button
                         type="button"
                         onClick={() => onNavigate('review')}
@@ -70,18 +96,82 @@ export const AuditRecordsView: React.FC<AuditRecordsViewProps> = ({
                         <ArrowLeft className="w-3.5 h-3.5" />
                         <span>Back to Review Queue</span>
                     </button>
+
+                    <button
+                        type="button"
+                        onClick={handleVerifySnapshot}
+                        disabled={isVerifying}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-xs font-semibold text-emerald-300 cursor-pointer"
+                    >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>
+                            {isVerifying ? 'Verifying HMAC...' : 'Verify Snapshot Integrity'}
+                        </span>
+                    </button>
+
                     <button
                         type="button"
                         onClick={handleExportRecord}
+                        disabled={isExporting}
                         className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white cursor-pointer"
                     >
                         <Download className="w-3.5 h-3.5" />
-                        <span>Export Audit Record (JSON)</span>
+                        <span>
+                            {isExporting ? 'Exporting...' : 'Compliance & CMS Export'}
+                        </span>
                     </button>
                 </div>
             </div>
 
-            {/* Snapshot Record Card (Section 4G Requirements) */}
+            {/* Live SnapshotVerificationResponse Banner (Section 13) */}
+            {verificationResult && (
+                <div
+                    className={`p-4 rounded-xl border flex items-start gap-3 text-xs ${verificationResult.is_valid
+                            ? 'bg-emerald-950/40 border-emerald-800/70 text-emerald-200'
+                            : 'bg-amber-950/40 border-amber-800/70 text-amber-200'
+                        }`}
+                >
+                    {verificationResult.is_valid ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    ) : (
+                        <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    )}
+                    <div className="space-y-1 font-mono">
+                        <div className="font-semibold">
+                            status_code: {verificationResult.status_code} • is_valid:{' '}
+                            {String(verificationResult.is_valid)} • chain_integrity_verified:{' '}
+                            {String(verificationResult.chain_integrity_verified)}
+                        </div>
+                        <p className="font-sans text-zinc-200">{verificationResult.message}</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Simulated CMS Payload Preview (Section 14.1) */}
+            {exportData && (
+                <div className="bg-[#121215] border border-zinc-800 rounded-xl p-5 space-y-3">
+                    <div className="flex items-center justify-between text-xs font-mono">
+                        <span className="font-semibold text-emerald-400">
+                            Simulated CMS Export Payload ({exportData.simulated_cms_payload.cms_export_mode})
+                        </span>
+                        <span>
+                            export_ready_for_cms:{' '}
+                            <strong>
+                                {String(exportData.simulated_cms_payload.export_ready_for_cms)}
+                            </strong>
+                        </span>
+                    </div>
+                    <p className="text-xs text-zinc-300">
+                        {exportData.simulated_cms_payload.notice}
+                    </p>
+                    <div className="text-[11px] font-mono text-zinc-400">
+                        Populated approved_blocks count:{' '}
+                        {exportData.simulated_cms_payload.approved_blocks.length}
+                    </div>
+                </div>
+            )}
+
+            {/* Snapshot Record Card */}
             {!snap ? (
                 <div className="bg-[#121215] border border-zinc-800/90 rounded-xl p-10 text-center space-y-3">
                     <Lock className="w-8 h-8 text-zinc-600 mx-auto" />
@@ -89,15 +179,11 @@ export const AuditRecordsView: React.FC<AuditRecordsViewProps> = ({
                         No Approval or Rejection Snapshot Recorded Yet
                     </div>
                     <p className="text-xs text-zinc-500 max-w-md mx-auto">
-                        This draft is currently in <code className="font-mono text-zinc-300">{audit.overall_status}</code> state. Complete a review decision in the Review Queue (as BRAND_MANAGER or AUTHORISED_REVIEWER) to generate an AuditSnapshotRecord.
+                        This draft is currently in{' '}
+                        <code className="font-mono text-zinc-300">{audit.overall_status}</code>{' '}
+                        state. Complete a review decision in the Review Queue to generate an
+                        AuditSnapshotRecord.
                     </p>
-                    <button
-                        type="button"
-                        onClick={() => onNavigate('review')}
-                        className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-100 cursor-pointer"
-                    >
-                        Go to Review Queue →
-                    </button>
                 </div>
             ) : (
                 <div className="bg-[#121215] border border-zinc-800/90 rounded-xl overflow-hidden">
@@ -116,28 +202,6 @@ export const AuditRecordsView: React.FC<AuditRecordsViewProps> = ({
                     </div>
 
                     <div className="p-5 space-y-5">
-                        {/* Section 4G Rule: Never invent a valid signature or show a fake verified state */}
-                        <div
-                            className={`p-3.5 rounded-lg border flex items-start gap-3 text-xs ${isMockMode
-                                    ? 'bg-amber-950/40 border-amber-800/70 text-amber-200'
-                                    : 'bg-emerald-950/40 border-emerald-800/70 text-emerald-200'
-                                }`}
-                        >
-                            <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
-                            <div className="space-y-0.5">
-                                <div className="font-mono font-semibold uppercase">
-                                    Snapshot Verification Status:{' '}
-                                    {isMockMode
-                                        ? 'UNVERIFIED_MOCK_ADAPTER (Awaiting Live Backend HMAC Verification)'
-                                        : 'BACKEND_RECORDED_SNAPSHOT'}
-                                </div>
-                                <p className="text-[11px] opacity-90">
-                                    In accordance with Section 4G integrity rules, the frontend never fabricates cryptographic signature verification locally; authoritative HMAC-SHA256 verification is performed strictly by the FastAPI backend.
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Core Metadata Grid */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
                             <div className="p-3.5 rounded-lg bg-zinc-950 border border-zinc-800/90 space-y-1">
                                 <span className="text-zinc-500 block">Approval State</span>
@@ -165,7 +229,6 @@ export const AuditRecordsView: React.FC<AuditRecordsViewProps> = ({
                             </div>
                         </div>
 
-                        {/* Version & Hash Lineage */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
                             <div className="p-3.5 rounded-lg bg-zinc-950 border border-zinc-800/90 space-y-1.5">
                                 <div className="text-zinc-500 text-[10px] uppercase">
@@ -205,24 +268,18 @@ export const AuditRecordsView: React.FC<AuditRecordsViewProps> = ({
                                 </div>
                             </div>
                         </div>
-
-                        {snap.review_notes && (
-                            <div className="p-3.5 rounded-lg bg-zinc-900/80 border border-zinc-800 text-xs">
-                                <span className="font-mono font-semibold text-zinc-400 uppercase block mb-1">
-                                    Recorded Reviewer / Override Notes:
-                                </span>
-                                <p className="text-zinc-200 italic">"{snap.review_notes}"</p>
-                            </div>
-                        )}
                     </div>
                 </div>
             )}
 
-            {/* AI Disclosure Log Inspector (From AuditResponse.ai_disclosure_log) */}
+            {/* AI Disclosure Log Inspector */}
             <div className="bg-[#121215] border border-zinc-800/90 rounded-xl p-5 space-y-3">
                 <div className="flex items-center gap-2 text-xs font-semibold text-zinc-200">
                     <Cpu className="w-4 h-4 text-emerald-400" />
-                    <span>Per-Audit AI & Engine Disclosure Log (<code className="font-mono">ai_disclosure_log</code>)</span>
+                    <span>
+                        Per-Audit AI & Engine Disclosure Log (
+                        <code className="font-mono">ai_disclosure_log</code>)
+                    </span>
                 </div>
                 <pre className="p-4 rounded-lg bg-zinc-950 border border-zinc-800 text-xs font-mono text-zinc-300 overflow-x-auto">
                     {JSON.stringify(audit.ai_disclosure_log, null, 2)}

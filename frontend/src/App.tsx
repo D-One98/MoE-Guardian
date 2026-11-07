@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { AppShell } from './components/layout/AppShell';
 import type { NavRoute } from './components/layout/Sidebar';
 import type {
@@ -13,7 +13,8 @@ import {
   INITIAL_MOCK_AUDIT_RESPONSE,
 } from './services/mockAdapter';
 import {
-  IS_MOCK_MODE,
+  FORCE_MOCK_MODE,
+  checkBackendHealthService,
   runAuditService,
   submitReviewDecisionService,
 } from './services/auditService';
@@ -51,6 +52,14 @@ export function App() {
   const [activeRoute, setActiveRoute] = useState<NavRoute>('dashboard');
   const [currentRole, setCurrentRole] = useState<DemoRole>('CREATOR');
   const [isLoadingAudit, setIsLoadingAudit] = useState(false);
+  const [isBackendOnline, setIsBackendOnline] = useState(false);
+
+  // Check if Divy's FastAPI server is live at VITE_API_BASE_URL/health
+  useEffect(() => {
+    void checkBackendHealthService().then((res) => {
+      setIsBackendOnline(res.online);
+    });
+  }, []);
 
   // Canonical Editor State
   const [campaignId, setCampaignId] = useState<string>(
@@ -62,17 +71,14 @@ export function App() {
   );
   const [nextBlockSeq, setNextBlockSeq] = useState<number>(4);
 
-  // Track applied rewrites and creator override justifications
   const [appliedFindingIds, setAppliedFindingIds] = useState<string[]>([]);
   const [findingOverrides, setFindingOverrides] = useState<Record<string, string>>({});
 
-  // Current live revision hash of the editor
   const currentRevisionHash = useMemo(
     () => computeEditorRevisionHash(blocks, altText),
     [blocks, altText]
   );
 
-  // Active Audit Response State
   const [audit, setAudit] = useState<AuditResponse>(() => ({
     ...INITIAL_MOCK_AUDIT_RESPONSE,
     document_revision_hash: computeEditorRevisionHash(
@@ -81,10 +87,8 @@ export function App() {
     ),
   }));
 
-  // Stale-finding detection
   const isStale = currentRevisionHash !== audit.document_revision_hash;
 
-  // Update a block's text while preserving its document_block_id
   const handleUpdateBlockText = (blockId: string, newText: string) => {
     setBlocks((prev) =>
       prev.map((b) =>
@@ -93,7 +97,6 @@ export function App() {
     );
   };
 
-  // Apply surgical rewrite to block
   const handleApplySurgicalRewrite = (finding: UnifiedFinding) => {
     if (
       !finding.document_block_id ||
@@ -121,7 +124,6 @@ export function App() {
     }));
   };
 
-  // Save finding override justification
   const handleSaveFindingOverride = (findingId: string, justification: string) => {
     setFindingOverrides((prev) => ({
       ...prev,
@@ -134,7 +136,6 @@ export function App() {
     }));
   };
 
-  // Add / Remove / Reset Blocks
   const handleAddBlock = () => {
     const formattedNum = String(nextBlockSeq).padStart(2, '0');
     setBlocks((prev) => [
@@ -162,7 +163,6 @@ export function App() {
     });
   };
 
-  // Run VERITY MoE Audit via Service Layer
   const handleRunAudit = async () => {
     setIsLoadingAudit(true);
     try {
@@ -182,7 +182,6 @@ export function App() {
     }
   };
 
-  // Submit Maker-Checker Review Decision via Service Layer
   const handleSubmitReviewDecision = async (req: ReviewDecisionRequest) => {
     const updatedAudit = await submitReviewDecisionService(audit, req);
     setAudit(updatedAudit);
@@ -205,7 +204,7 @@ export function App() {
       orgId={audit.org_id}
       findingsCount={audit.findings.length}
       isStale={isStale}
-      isMockMode={IS_MOCK_MODE}
+      isMockMode={FORCE_MOCK_MODE || !isBackendOnline}
       isLoadingAudit={isLoadingAudit}
       onTriggerDemoLoader={triggerLoaderPreview}
     >
@@ -268,7 +267,7 @@ export function App() {
       {activeRoute === 'records' && (
         <AuditRecordsView
           audit={audit}
-          isMockMode={IS_MOCK_MODE}
+          isMockMode={FORCE_MOCK_MODE || !isBackendOnline}
           onNavigate={setActiveRoute}
         />
       )}

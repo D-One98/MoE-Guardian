@@ -187,6 +187,37 @@ export interface ApprovedFact {
   version?: string;
 }
 
+export type OcrStatus =
+  | "NOT_REQUESTED"
+  | "OCR_SUCCESS"
+  | "OCR_NO_TEXT_DETECTED"
+  | "OCR_LOW_CONFIDENCE"
+  | "OCR_UNAVAILABLE"
+  | "OCR_FAILED";
+
+export interface OcrTextRegion {
+  text: string;
+  confidence: number;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export interface OcrExtractionResult {
+  ocr_status: OcrStatus;
+  image_width: number;
+  image_height: number;
+  extracted_text: string;
+  mean_confidence: number | null;
+  min_confidence_threshold: number;
+  regions_count: number;
+  regions: OcrTextRegion[];
+  prompt_injection_signals_detected: boolean;
+  governance_evaluated: boolean;
+  notes: string | null;
+}
+
 export interface VisualAssetInput {
   document_block_id?: string;
   filename?: string;
@@ -195,6 +226,8 @@ export interface VisualAssetInput {
   alt_text?: string | null;
   declared_foreground_hex?: string | null;
   declared_background_hex?: string | null;
+  enable_ocr?: boolean | null;
+  ocr_min_confidence?: number | null;
 }
 
 export interface BrandPaletteItem {
@@ -264,4 +297,58 @@ export interface OnDemandRewriteResponse {
   original_verification_status: VerificationStatus;
   rewrite_candidates: RewriteCandidate[];
   selected_primary_candidate: RewriteCandidate | null;
+}
+
+export type SnapshotVerificationStatus =
+  | "VALID"
+  | "INVALID_SIGNATURE"
+  | "UNKNOWN_KEY_ID"
+  | "MALFORMED_SNAPSHOT"
+  | "BROKEN_HASH_CHAIN"
+  | "NO_SNAPSHOT_FOUND";
+
+export interface SnapshotVerificationResponse {
+  audit_id: string;
+  org_id: string;
+  snapshot_id: string | null;
+  hmac_key_id: string | null;
+  is_valid: boolean;
+  status_code: SnapshotVerificationStatus;
+  chain_integrity_verified: boolean;
+  message: string;
+}
+
+export interface SimulatedCmsPayload {
+  cms_export_mode: "SIMULATED_PRE_PUBLICATION_PAYLOAD" | string;
+  external_cms_published: boolean;
+  export_ready_for_cms: boolean;
+  approval_status: AuditStatus;
+  audit_reference_id: string;
+  document_revision_hash: string;
+  snapshot_id: string | null;
+  snapshot_hmac_signature: string | null;
+  approved_blocks: ContentBlock[];
+  approved_alt_text: string | null;
+  notice: string;
+}
+
+export interface ComplianceExportResponse {
+  export_version: string;
+  generated_at_utc: string;
+  audit_id: string;
+  org_id: string;
+  campaign_id: string;
+  created_at_utc: string;
+  submitted_by_role: DemoRole;
+  document_revision_hash: string;
+  overall_status: AuditStatus;
+  human_review_required: boolean;
+  mandatory_policies_enforced: boolean;
+  machine_governance_summary: Record<string, unknown>;
+  engine_executions: EngineExecutionRecord[];
+  machine_findings: UnifiedFinding[];
+  human_review_decision: Record<string, unknown> | null;
+  snapshot_integrity: SnapshotVerificationResponse;
+  ai_disclosure_log: Record<string, unknown>;
+  simulated_cms_payload: SimulatedCmsPayload;
 }

@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 from app.core.config import settings
@@ -9,14 +10,16 @@ from app.schemas.contracts import (
     AuditResponse,
     BrandPaletteItem,
     BrandRule,
+    ComplianceExportResponse,
     CsvFactsUploadResponse,
     CsvRowError,
+    DemoRole,
     GuidelineConfirmRequest,
     GuidelineUploadPreviewResponse,
+    OnDemandRewriteRequest,
+    OnDemandRewriteResponse,
     ReviewDecisionRequest,
-    DemoRole,
-    OnDemandRewriteRequest, 
-    OnDemandRewriteResponse
+    SnapshotVerificationResponse,
 )
 from app.services.seed_data import (
     DEMO_ORG_NAME,
@@ -35,6 +38,18 @@ from app.services.orchestrator import orchestrator
 
 router = APIRouter(prefix="/api")
 
+def _require_admin_or_manager_if_authenticated(tenant: TenantContext) -> None:
+    if not tenant.is_demo_fallback and tenant.role not in (
+        DemoRole.WORKSPACE_ADMIN,
+        DemoRole.BRAND_MANAGER,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "INSUFFICIENT_TENANT_ROLE",
+                "message": "Modifying brand rules, facts, or palettes requires WORKSPACE_ADMIN or BRAND_MANAGER membership.",
+            },
+        )
 
 @router.get("/health")
 def get_health():
@@ -44,6 +59,18 @@ def get_health():
         "engine": "VERITY MoE",
         "version": settings.app_version,
         "environment": settings.app_env,
+    }
+
+@router.get("/auth/me")
+def get_authenticated_tenant_profile(
+    tenant: TenantContext = Depends(get_tenant_context),
+):
+    return {
+        "user_id": tenant.user_id,
+        "org_id": tenant.org_id,
+        "role": tenant.role.value if tenant.role else None,
+        "is_demo_fallback": tenant.is_demo_fallback,
+        "auth_mode": tenant.auth_mode,
     }
 
 
@@ -92,6 +119,7 @@ def create_brand_rule(
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ):
+    _require_admin_or_manager_if_authenticated(tenant)
     repo = GovernanceRepository(db, org_id=tenant.org_id)
     try:
         created_rule = repo.create_rule(payload)
@@ -120,7 +148,9 @@ async def upload_brand_guideline_pdf(
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ):
-    file_bytes = await file.read()
+    _require_admin_or_manager_if_authenticated(tenant)
+    max_pdf_bytes = int(os.getenv("MAX_PDF_UPLOAD_BYTES", str(settings.max_pdf_upload_bytes)))
+    file_bytes = await file.read(max_pdf_bytes + 1)
     try:
         parsed = parse_brand_guideline_pdf(file_bytes, file.filename or "Brand_Guidelines.pdf")
     except IngestionValidationError as exc:
@@ -148,6 +178,7 @@ def confirm_brand_guideline_rules(
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ):
+    _require_admin_or_manager_if_authenticated(tenant)
     repo = GovernanceRepository(db, org_id=tenant.org_id)
     try:
         persisted_rules = repo.confirm_ingestion_batch(
@@ -199,6 +230,7 @@ def create_brand_fact(
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ):
+    _require_admin_or_manager_if_authenticated(tenant)
     repo = GovernanceRepository(db, org_id=tenant.org_id)
     try:
         created_fact = repo.create_fact(payload)
@@ -223,7 +255,9 @@ async def upload_approved_facts_csv(
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ):
-    file_bytes = await file.read()
+    _require_admin_or_manager_if_authenticated(tenant)
+    max_csv_bytes = int(os.getenv("MAX_CSV_UPLOAD_BYTES", str(settings.max_csv_upload_bytes)))
+    file_bytes = await file.read(max_csv_bytes + 1)
     try:
         candidate_facts, row_errors, total_rows = parse_approved_facts_csv(
             file_bytes, file.filename or "Approved_Facts.csv"
@@ -278,6 +312,7 @@ def create_brand_palette_item(
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ):
+    _require_admin_or_manager_if_authenticated(tenant)
     repo = GovernanceRepository(db, org_id=tenant.org_id)
     try:
         created = repo.create_palette_item(payload)
@@ -298,7 +333,12 @@ def create_audit(
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ):
-    return orchestrator.run_audit(db, payload, org_id=tenant.org_id)
+    effective_payload = (
+        payload.model_copy(update={"submitted_by_role": tenant.role})
+        if (not tenant.is_demo_fallback and tenant.role is not None)
+        else payload
+    )
+    return orchestrator.run_audit(db, effective_payload, org_id=tenant.org_id)
 
 
 @router.get("/audits/{audit_id}", response_model=AuditResponse)
@@ -323,11 +363,26 @@ def review_audit(
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ):
+    effective_role = payload.actor_role
+    if not tenant.is_demo_fallback and tenant.role is not None:
+        if payload.actor_role != tenant.role:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "ROLE_SPOOFING_FORBIDDEN",
+                    "message": (
+                        f"Authenticated membership role '{tenant.role.value}' does not match "
+                        f"client-supplied actor_role '{payload.actor_role.value}'."
+                    ),
+                },
+            )
+        effective_role = tenant.role
+
     try:
         return orchestrator.record_review_decision(
             db=db,
             audit_id=audit_id,
-            actor_role=payload.actor_role,
+            actor_role=effective_role,
             decision=payload.decision,
             override_justification=payload.override_justification,
             org_id=tenant.org_id,
@@ -346,6 +401,11 @@ def review_audit(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"error": "INVALID_REVIEW_TRANSITION", "message": str(exc)},
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "HMAC_SIGNING_CONFIG_ERROR", "message": str(exc)},
         )
 
 @router.post(
@@ -371,4 +431,57 @@ def generate_and_validate_finding_rewrite(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": "AUDIT_OR_FINDING_NOT_FOUND", "message": str(exc)},
+        )
+       
+@router.get(
+    "/audits/{audit_id}/verify-snapshot",
+    response_model=SnapshotVerificationResponse,
+)
+def verify_audit_snapshot(
+    audit_id: str,
+    db: Session = Depends(get_db),
+    tenant: TenantContext = Depends(get_tenant_context),
+):
+    try:
+        return orchestrator.verify_audit_snapshot_integrity(
+            db=db,
+            audit_id=audit_id,
+            org_id=tenant.org_id,
+        )
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "AUDIT_NOT_FOUND", "message": str(exc)},
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "HMAC_SIGNING_CONFIG_ERROR", "message": str(exc)},
+        )
+
+
+@router.get(
+    "/audits/{audit_id}/export",
+    response_model=ComplianceExportResponse,
+)
+def export_audit_compliance_report(
+    audit_id: str,
+    db: Session = Depends(get_db),
+    tenant: TenantContext = Depends(get_tenant_context),
+):
+    try:
+        return orchestrator.export_compliance_package(
+            db=db,
+            audit_id=audit_id,
+            org_id=tenant.org_id,
+        )
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "AUDIT_NOT_FOUND", "message": str(exc)},
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "HMAC_SIGNING_CONFIG_ERROR", "message": str(exc)},
         )

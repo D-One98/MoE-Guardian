@@ -13,6 +13,7 @@ from app.models.orm_models import (
     AuditRecordModel,
     AuditFindingModel,
     ReviewSnapshotModel,
+    OrganizationMembershipModel,
 )
 from app.schemas.contracts import (
     BrandRule,
@@ -681,3 +682,97 @@ class GovernanceRepository:
         except Exception:
             self.db.rollback()
             raise
+
+    def upsert_membership(
+        self,
+        user_id: str,
+        org_id: str,
+        role: DemoRole,
+        is_active: bool = True,
+    ) -> OrganizationMembershipModel:
+        try:
+            existing = self.db.execute(
+                select(OrganizationMembershipModel).where(
+                    OrganizationMembershipModel.user_id == user_id,
+                    OrganizationMembershipModel.org_id == org_id,
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                existing.role = role.value
+                existing.is_active = is_active
+                self.db.commit()
+                self.db.refresh(existing)
+                return existing
+
+            member = OrganizationMembershipModel(
+                user_id=user_id,
+                org_id=org_id,
+                role=role.value,
+                is_active=is_active,
+            )
+            self.db.add(member)
+            self.db.commit()
+            self.db.refresh(member)
+            return member
+        except Exception:
+            self.db.rollback()
+            raise
+
+    def get_active_membership(
+        self,
+        user_id: str,
+        org_id: str,
+    ) -> Optional[OrganizationMembershipModel]:
+        return self.db.execute(
+            select(OrganizationMembershipModel).where(
+                OrganizationMembershipModel.user_id == user_id,
+                OrganizationMembershipModel.org_id == org_id,
+                OrganizationMembershipModel.is_active.is_(True),
+            )
+        ).scalar_one_or_none()
+
+    def get_primary_active_membership_for_user(
+        self,
+        user_id: str,
+    ) -> Optional[OrganizationMembershipModel]:
+        return (
+            self.db.execute(
+                select(OrganizationMembershipModel)
+                .where(
+                    OrganizationMembershipModel.user_id == user_id,
+                    OrganizationMembershipModel.is_active.is_(True),
+                )
+                .order_by(OrganizationMembershipModel.id.asc())
+                .limit(1)
+            )
+            .scalars()
+            .first()
+        )
+
+    def list_active_memberships_for_user(
+        self,
+        user_id: str,
+    ) -> List[OrganizationMembershipModel]:
+        return list(
+            self.db.execute(
+                select(OrganizationMembershipModel)
+                .where(
+                    OrganizationMembershipModel.user_id == user_id,
+                    OrganizationMembershipModel.is_active.is_(True),
+                )
+                .order_by(OrganizationMembershipModel.id.asc())
+            )
+            .scalars()
+            .all()
+        )
+
+    def list_org_snapshots_ordered(self) -> List[ReviewSnapshotModel]:
+        return list(
+            self.db.execute(
+                select(ReviewSnapshotModel)
+                .where(ReviewSnapshotModel.org_id == self.org_id)
+                .order_by(ReviewSnapshotModel.id.asc())
+            )
+            .scalars()
+            .all()
+        )

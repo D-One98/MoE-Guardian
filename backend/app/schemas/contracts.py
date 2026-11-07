@@ -142,6 +142,42 @@ class ContentBlock(BaseModel):
             raise ValueError("Field must not be blank or whitespace only.")
         return v
 
+class OcrStatus(str, Enum):
+    NOT_REQUESTED = "NOT_REQUESTED"
+    OCR_SUCCESS = "OCR_SUCCESS"
+    OCR_NO_TEXT_DETECTED = "OCR_NO_TEXT_DETECTED"
+    OCR_LOW_CONFIDENCE = "OCR_LOW_CONFIDENCE"
+    OCR_UNAVAILABLE = "OCR_UNAVAILABLE"
+    OCR_FAILED = "OCR_FAILED"
+
+
+class OcrTextRegion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    confidence: float
+    left: int = 0
+    top: int = 0
+    width: int = 0
+    height: int = 0
+
+
+class OcrExtractionResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ocr_status: OcrStatus
+    image_width: int = 0
+    image_height: int = 0
+    extracted_text: str = ""
+    mean_confidence: Optional[float] = None
+    min_confidence_threshold: float = 60.0
+    regions_count: int = 0
+    regions: List[OcrTextRegion] = Field(default_factory=list)
+    prompt_injection_signals_detected: bool = False
+    governance_evaluated: bool = False
+    notes: Optional[str] = None
+
+
 class VisualAssetInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -156,7 +192,16 @@ class VisualAssetInput(BaseModel):
     declared_background_hex: Optional[str] = Field(
         default=None, description="Optional reliably known background hex (#RRGGBB)"
     )
-
+    enable_ocr: Optional[bool] = Field(
+        default=None,
+        description="Whether to run Tesseract OCR text extraction on this visual asset.",
+    )
+    ocr_min_confidence: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=100.0,
+        description="Optional override for minimum acceptable OCR confidence percentage (0-100).",
+    )
 class EvidenceReference(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -401,3 +446,63 @@ class OnDemandRewriteResponse(BaseModel):
     original_verification_status: VerificationStatus
     rewrite_candidates: List[RewriteCandidate]
     selected_primary_candidate: Optional[RewriteCandidate] = None
+    
+class SnapshotVerificationStatus(str, Enum):
+    VALID = "VALID"
+    INVALID_SIGNATURE = "INVALID_SIGNATURE"
+    UNKNOWN_KEY_ID = "UNKNOWN_KEY_ID"
+    MALFORMED_SNAPSHOT = "MALFORMED_SNAPSHOT"
+    BROKEN_HASH_CHAIN = "BROKEN_HASH_CHAIN"
+    NO_SNAPSHOT_FOUND = "NO_SNAPSHOT_FOUND"
+
+
+class SnapshotVerificationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    audit_id: str
+    org_id: str
+    snapshot_id: Optional[str] = None
+    hmac_key_id: Optional[str] = None
+    is_valid: bool
+    status_code: SnapshotVerificationStatus
+    chain_integrity_verified: bool
+    message: str
+
+
+class SimulatedCmsPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cms_export_mode: str = "SIMULATED_PRE_PUBLICATION_PAYLOAD"
+    external_cms_published: bool = False
+    export_ready_for_cms: bool
+    approval_status: AuditStatus
+    audit_reference_id: str
+    document_revision_hash: str
+    snapshot_id: Optional[str] = None
+    snapshot_hmac_signature: Optional[str] = None
+    approved_blocks: List[ContentBlock] = Field(default_factory=list)
+    approved_alt_text: Optional[str] = None
+    notice: str
+
+
+class ComplianceExportResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    export_version: str = "1.0"
+    generated_at_utc: str
+    audit_id: str
+    org_id: str
+    campaign_id: str
+    created_at_utc: str
+    submitted_by_role: DemoRole
+    document_revision_hash: str
+    overall_status: AuditStatus
+    human_review_required: bool
+    mandatory_policies_enforced: bool
+    machine_governance_summary: Dict[str, Any]
+    engine_executions: List[EngineExecutionRecord]
+    machine_findings: List[UnifiedFinding]
+    human_review_decision: Optional[Dict[str, Any]] = None
+    snapshot_integrity: SnapshotVerificationResponse
+    ai_disclosure_log: Dict[str, Any]
+    simulated_cms_payload: SimulatedCmsPayload

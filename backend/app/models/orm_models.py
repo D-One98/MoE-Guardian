@@ -174,7 +174,18 @@ class ReviewSnapshotModel(Base):
 
     audit: Mapped["AuditRecordModel"] = relationship("AuditRecordModel", back_populates="snapshots")
 
+class OrganizationMembershipModel(Base):
+    __tablename__ = "organization_memberships"
 
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(128), index=True, nullable=False)
+    org_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    role: Mapped[str] = mapped_column(String(64), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at_utc: Mapped[str] = mapped_column(String(64), default=_utc_now_iso, nullable=False)
+
+
+Index("ix_org_memberships_user_org", OrganizationMembershipModel.user_id, OrganizationMembershipModel.org_id, unique=True)
 Index("ix_brand_rules_org_rule", BrandRuleModel.org_id, BrandRuleModel.rule_id, unique=True)
 Index("ix_approved_facts_org_fact", ApprovedFactModel.org_id, ApprovedFactModel.fact_id, unique=True)
 Index("ix_brand_palettes_org_palette", BrandPaletteModel.org_id, BrandPaletteModel.palette_id, unique=True)

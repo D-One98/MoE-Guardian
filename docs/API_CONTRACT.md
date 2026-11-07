@@ -123,3 +123,32 @@ Returns 400 Bad Request if approving a draft with non-SUPPORTED findings without
   ],
   "warnings": []
 }
+
+---
+
+## 3. Sprint 1–3 Production Hardening & Final Handover Endpoints
+
+### `GET /api/auth/me`
+Returns the resolved server-side `TenantContext` (`user_id`, `org_id`, `role`, `is_demo_fallback`, `auth_mode`).
+* When `REQUIRE_VERIFIED_TENANT_AUTH=true` (or `APP_ENV=production`), requires `Authorization: Bearer <HS256_JWT>`.
+* If an authenticated user holds active memberships in multiple organisations, the request must specify the target organisation via `X-Demo-Org-Id` header or JWT `org_id` claim; otherwise returns `400 AMBIGUOUS_TENANT_MEMBERSHIP_SELECTION_REQUIRED`.
+
+### `POST /api/brand/guidelines/upload-pdf` & `POST /api/brand/guidelines/{batch_id}/confirm`
+* Uploads a Brand Guideline PDF (`multipart/form-data`, max 10 MB, max 50 pages), validates `%PDF-` signature and `PyMuPDF` structure, isolates untrusted text via PromptShield, and stages candidate rules in `PENDING_CONFIRMATION`.
+* Rules become active in `brand_rules` only after `POST /api/brand/guidelines/{batch_id}/confirm`.
+
+### `POST /api/brand/facts/upload-csv`
+* Uploads an Approved Facts CSV (`multipart/form-data`, max 5 MB), validates required columns, persists valid facts under `tenant.org_id`, and returns structured `row_errors` for malformed or duplicate rows.
+
+### `GET /api/brand/palette` & `POST /api/brand/palette`
+* Lists and creates tenant-scoped `BrandPaletteItem` hex colours used by `VisualGuard` CIEDE2000 ($\Delta E$) checks.
+
+### `POST /api/audits/{audit_id}/findings/{finding_id}/rewrite`
+* Generates intent-preserving surgical rewrites on demand via `VoiceGuard` (or validates `custom_candidate_text`) and runs the fail-closed `RewriteValidationCoordinator` (`RuleGuard` + conditional `ClaimGuard`, zero recursive `VoiceGuard` calls).
+
+### `GET /api/audits/{audit_id}/verify-snapshot`
+* Reconstructs the canonical snapshot payload, looks up `snapshot.hmac_key_id` in the configured key ring (`HMAC_KEY_ID` + `HMAC_RETIRED_KEYS`), verifies the `HMAC-SHA256` signature in constant time, and verifies `previous_snapshot_hmac` chain continuity.
+* Returns `SnapshotVerificationResponse` (`VALID`, `INVALID_SIGNATURE`, `UNKNOWN_KEY_ID`, `MALFORMED_SNAPSHOT`, `BROKEN_HASH_CHAIN`, or `NO_SNAPSHOT_FOUND`).
+
+### `GET /api/audits/{audit_id}/export`
+* Returns a tenant-scoped `ComplianceExportResponse` separating `machine_findings` (`RuleGuard`, `ClaimGuard`, `VisualGuard` with OCR telemetry, `VoiceGuard`) from `human_review_decision`, `snapshot_integrity`, `ai_disclosure_log`, and `simulated_cms_payload` (`approved_blocks` populated only when `overall_status == "APPROVED"` and `snapshot_integrity.is_valid == true`).

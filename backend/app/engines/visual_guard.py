@@ -16,8 +16,11 @@ from app.schemas.contracts import (
     AnchorResolutionStatus,
     EvidenceReference,
     EngineExecutionRecord,
+    OcrExtractionResult,
+    OcrStatus,
 )
 from app.services.seed_data import get_demo_brand_palette
+from app.services.ocr_service import run_tesseract_ocr_on_image
 
 SUPPORTED_MIME_TYPES = {
     "image/png": "PNG",
@@ -283,6 +286,17 @@ def run_visual_guard_baseline(
             rgb_img = img.convert("RGB")
             total_pixels = width * height
             colors = rgb_img.getcolors(maxcolors=65536)
+            ocr_requested = (
+                visual_asset.enable_ocr
+                if visual_asset.enable_ocr is not None
+                else (os.getenv("VISUALGUARD_OCR_ENABLED", str(settings.visualguard_ocr_enabled)).lower() == "true")
+            )
+            ocr_result: Optional[OcrExtractionResult] = None
+            if ocr_requested:
+                ocr_result = run_tesseract_ocr_on_image(
+                    rgb_image=rgb_img,
+                    min_confidence_threshold=visual_asset.ocr_min_confidence,
+                )
     except (UnidentifiedImageError, ValueError, OSError, Image.DecompressionBombError) as exc:
         findings.append(
             UnifiedFinding(
@@ -505,11 +519,144 @@ def run_visual_guard_baseline(
             )
         )
         finding_counter += 1
+       
+    # 8. Evaluate OCR extraction status (preserving palette & contrast checks above even if OCR fails)
+    if ocr_result is not None:
+        if ocr_result.ocr_status == OcrStatus.OCR_UNAVAILABLE:
+            overall_engine_state = ExecutionState.INSUFFICIENT_DATA
+            findings.append(
+                UnifiedFinding(
+                    finding_id=f"FND-VG-{finding_counter:04d}",
+                    expert_engine="VisualGuard",
+                    execution_state=ExecutionState.INSUFFICIENT_DATA,
+                    finding_type=FindingType.VISUAL_A11Y_SUBSET,
+                    severity=Severity.MEDIUM,
+                    verification_status=VerificationStatus.NOT_CLAIM_APPLICABLE,
+                    document_block_id=block_id,
+                    matched_text=visual_asset.filename,
+                    anchor_resolution_status=AnchorResolutionStatus.UNRESOLVED_SIDEBAR_ONLY,
+                    explanation=(
+                        "Tesseract OCR executable is unavailable or misconfigured; embedded image text "
+                        "could not be audited automatically. Escalated as INSUFFICIENT_DATA for human review."
+                    ),
+                    evidence_reference=None,
+                    rewrite_candidate=None,
+                    human_review_required=True,
+                )
+            )
+            finding_counter += 1
+        elif ocr_result.ocr_status == OcrStatus.OCR_FAILED:
+            overall_engine_state = ExecutionState.ERROR
+            findings.append(
+                UnifiedFinding(
+                    finding_id=f"FND-VG-{finding_counter:04d}",
+                    expert_engine="VisualGuard",
+                    execution_state=ExecutionState.ERROR,
+                    finding_type=FindingType.VISUAL_A11Y_SUBSET,
+                    severity=Severity.HIGH,
+                    verification_status=VerificationStatus.NOT_CLAIM_APPLICABLE,
+                    document_block_id=block_id,
+                    matched_text=visual_asset.filename,
+                    anchor_resolution_status=AnchorResolutionStatus.UNRESOLVED_SIDEBAR_ONLY,
+                    explanation=(
+                        f"Tesseract OCR failed while inspecting '{visual_asset.filename}'. "
+                        "Visual text audit could not be completed; escalated for human review."
+                    ),
+                    evidence_reference=None,
+                    rewrite_candidate=None,
+                    human_review_required=True,
+                )
+            )
+            finding_counter += 1
+        elif ocr_result.ocr_status == OcrStatus.OCR_LOW_CONFIDENCE:
+            if overall_engine_state == ExecutionState.OK:
+                overall_engine_state = ExecutionState.INSUFFICIENT_DATA
+            findings.append(
+                UnifiedFinding(
+                    finding_id=f"FND-VG-{finding_counter:04d}",
+                    expert_engine="VisualGuard",
+                    execution_state=ExecutionState.INSUFFICIENT_DATA,
+                    finding_type=FindingType.VISUAL_A11Y_SUBSET,
+                    severity=Severity.MEDIUM,
+                    verification_status=VerificationStatus.NOT_CLAIM_APPLICABLE,
+                    document_block_id=block_id,
+                    matched_text=visual_asset.filename,
+                    anchor_resolution_status=AnchorResolutionStatus.UNRESOLVED_SIDEBAR_ONLY,
+                    explanation=(
+                        f"Low-confidence OCR extraction (mean confidence {ocr_result.mean_confidence}% < "
+                        f"{ocr_result.min_confidence_threshold}% threshold). Definitive policy findings "
+                        "were not generated from uncertain OCR text; manual human review required."
+                    ),
+                    evidence_reference=None,
+                    rewrite_candidate=None,
+                    human_review_required=True,
+                )
+            )
+            finding_counter += 1
+        elif ocr_result.ocr_status == OcrStatus.OCR_SUCCESS and ocr_result.prompt_injection_signals_detected:
+            findings.append(
+                UnifiedFinding(
+                    finding_id=f"FND-VG-{finding_counter:04d}",
+                    expert_engine="VisualGuard",
+                    execution_state=ExecutionState.OK,
+                    finding_type=FindingType.VISUAL_A11Y_SUBSET,
+                    severity=Severity.HIGH,
+                    verification_status=VerificationStatus.NOT_CLAIM_APPLICABLE,
+                    document_block_id=block_id,
+                    matched_text=visual_asset.filename,
+                    anchor_resolution_status=AnchorResolutionStatus.UNRESOLVED_SIDEBAR_ONLY,
+                    explanation=(
+                        "PromptShield alert: Potential instruction-override / prompt-injection phrasing "
+                        "detected inside OCR-extracted image text. Isolated as untrusted data."
+                    ),
+                    evidence_reference=None,
+                    rewrite_candidate=None,
+                    human_review_required=True,
+                )
+            )
+            finding_counter += 1
 
-    return findings, EngineExecutionRecord(
+    # Store the latest OCR result on the execution record notes or via attribute for orchestrator consumption
+    exec_record = EngineExecutionRecord(
         expert_engine="VisualGuard",
-        mandatory_enforced=True,
+        mandatory_enforced=(overall_engine_state != ExecutionState.ERROR),
         execution_state=overall_engine_state,
         findings_count=len(findings),
-        notes="Deterministic image format/size/bomb validation, CIEDE2000 palette check, alt-text check, and WCAG contrast check executed.",
+        notes=(
+            f"Deterministic image validation, CIEDE2000 palette, alt-text, and WCAG contrast executed. "
+            f"OCR status: {ocr_result.ocr_status.value if ocr_result else 'NOT_REQUESTED'}."
+        ),
     )
+    return findings, exec_record
+
+def run_visual_guard_with_ocr_metadata(
+    visual_asset: Optional[VisualAssetInput],
+    fallback_alt_text: Optional[str] = None,
+    brand_palette: Optional[List[Dict[str, Any]]] = None,
+) -> Tuple[List[UnifiedFinding], EngineExecutionRecord, Optional[OcrExtractionResult]]:
+    findings, exec_record = run_visual_guard_baseline(
+        visual_asset=visual_asset,
+        fallback_alt_text=fallback_alt_text,
+        brand_palette=brand_palette,
+    )
+    if visual_asset is None or exec_record.execution_state == ExecutionState.ERROR and not any(
+        "Tesseract OCR failed" in f.explanation for f in findings
+    ):
+        return findings, exec_record, None
+
+    ocr_requested = (
+        visual_asset.enable_ocr
+        if visual_asset.enable_ocr is not None
+        else (os.getenv("VISUALGUARD_OCR_ENABLED", str(settings.visualguard_ocr_enabled)).lower() == "true")
+    )
+    if not ocr_requested:
+        return findings, exec_record, None
+
+    raw_bytes = base64.b64decode(visual_asset.image_base64, validate=True)
+    with Image.open(io.BytesIO(raw_bytes)) as img:
+        rgb_img = img.convert("RGB")
+        ocr_res = run_tesseract_ocr_on_image(
+            rgb_image=rgb_img,
+            min_confidence_threshold=visual_asset.ocr_min_confidence,
+        )
+    return findings, exec_record, ocr_res

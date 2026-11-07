@@ -36,3 +36,117 @@
 2. **`ClaimGuard` Baseline (`backend/app/engines/claim_guard.py`):** Evaluates promotional/factual claims against `ApprovedFact` records across `SUPPORTED`, `PARTIAL`, `CONTRADICTED`, and `UNVERIFIABLE` states, paired with the fail-closed Rewrite Validation Coordinator.
 3. **`VisualGuard` Baseline (`backend/app/engines/visual_guard.py`):** Validates static PNG and JPG/JPEG creatives in memory (MIME + Pillow header match, 5 MB size cap, 16 MP decompression-bomb guard), compares dominant colours against the brand palette using **CIEDE2000 ($\Delta E$)**, checks `alt_text` metadata presence, and computes **WCAG 2.1 relative-luminance contrast** only when foreground/background colours are reliably known (returning `INSUFFICIENT_DATA` otherwise).
 4. **Fail-Closed Orchestration & HMAC Chaining (`backend/app/services/orchestrator.py`):** Any engine error sets `mandatory_policies_enforced = False` and escalates the audit to `ESCALATED_TO_AUTHORISED_REVIEWER`. Review decisions include `review_notes` inside the canonical JSON payload prior to `HMAC-SHA256` signing and chain against the latest persisted snapshot signature.
+
+# MoE-GUARDIAN — System Architecture
+
+> **Product:** MoE-GUARDIAN (Powered by VERITY MoE)
+> **Team:** THE MOE
+> **Architecture:** Modular FastAPI Backend + React/TypeScript Frontend
+> **Primary Goal:** Pre-publication brand governance and compliance.
+
+---
+
+## 1. System Boundaries & Core Principles
+
+MoE-GUARDIAN is a pre-publication brand-governance layer positioned between content creation and publication.
+
+Its purpose is to evaluate marketing content against:
+
+- Brand rules.
+- Approved factual information.
+- Visual identity requirements.
+- Accessibility considerations.
+- Tone and messaging guidelines.
+- Human approval requirements.
+
+### Core Principles
+
+**1. Deterministic First**
+
+Explicit policy checks and baseline factual comparisons execute through deterministic backend logic wherever possible.
+
+**2. Evidence-Grounded Decisions**
+
+Only backend records and verified evidence references are authoritative.
+
+**3. Backend Authority**
+
+The frontend cannot independently assign:
+
+- Claim verification status.
+- Rewrite validation status.
+- Human approval status.
+- Snapshot signatures.
+- Snapshot integrity results.
+
+**4. Fail-Closed Validation**
+
+If mandatory validation cannot be completed reliably, the system must not silently treat the content as approved.
+
+**5. Human Accountability**
+
+Machine-generated findings and human review decisions remain separate.
+
+---
+
+## 2. High-Level Architecture
+
+```text
+                    ┌──────────────────────────┐
+                    │       React Frontend     │
+                    │                          │
+                    │  Workspace / Editor      │
+                    │  Findings / Review UI     │
+                    │  Upload / Export          │
+                    └────────────┬─────────────┘
+                                 │
+                                 │ HTTP / JSON
+                                 │ Multipart Uploads
+                                 ▼
+                    ┌──────────────────────────┐
+                    │       FastAPI API        │
+                    │                          │
+                    │ Authentication & Tenant  │
+                    │ Request Validation       │
+                    │ API Route Handling       │
+                    └────────────┬─────────────┘
+                                 │
+                                 ▼
+                    ┌──────────────────────────┐
+                    │   VERITY MoE Orchestrator│
+                    │                          │
+                    │ Audit Coordination       │
+                    │ Specialist Execution     │
+                    │ Review Workflow          │
+                    └────────────┬─────────────┘
+                                 │
+             ┌───────────────────┼──────────────────┐
+             ▼                   ▼                  ▼
+        RuleGuard            ClaimGuard        VisualGuard
+                                                   │
+                                                   ▼
+                                               OCR Service
+
+                                 │
+                                 ▼
+                             VoiceGuard
+                                 │
+                                 ▼
+                     Rewrite Validation Coordinator
+
+                                 │
+                                 ▼
+                    ┌──────────────────────────┐
+                    │ Governance Repository    │
+                    │                          │
+                    │ SQLAlchemy ORM            │
+                    │ Tenant-Scoped Records     │
+                    └────────────┬─────────────┘
+                                 │
+                                 ▼
+                    ┌──────────────────────────┐
+                    │ SQLite / PostgreSQL       │
+                    │                          │
+                    │ Rules / Facts / Audits    │
+                    │ Findings / Snapshots      │
+                    └──────────────────────────┘

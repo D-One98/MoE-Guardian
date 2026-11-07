@@ -1,32 +1,476 @@
-# MoE-GUARDIAN — Project State (Session 1 Foundation)
+```markdown
+# MoE-GUARDIAN — Project State & Development Progress
 
-## 1. Implemented & Verified in Session 1
-* Runnable FastAPI application (`backend/app/main.py`, `backend/app/api/routes.py`) with CORS and `/docs`.
-* Unified Pydantic v2 Data Contract (`backend/app/schemas/contracts.py`) and matching TypeScript interfaces (`shared/contracts.ts`).
-* Deterministic `RuleGuard` engine (`backend/app/engines/rule_guard.py`) covering banned terms, exact brand casing, mandatory disclaimers, and numeric discount bounds.
-* Baseline `ClaimGuard` engine (`backend/app/engines/claim_guard.py`) supporting `SUPPORTED`, `PARTIAL`, `CONTRADICTED`, and `UNVERIFIABLE` states plus the fail-closed Rewrite Validation Coordinator.
-* Canonical block anchoring (`backend/app/services/anchoring.py`) with prefix/suffix context disambiguation.
-* Maker-Checker review state enforcement and chained `HMAC-SHA256` audit snapshot signing (`backend/app/services/orchestrator.py`).
-* 8 automated Pytest unit/integration tests verified passing (`backend/tests/test_foundation.py`).
+> **Project:** MoE-GUARDIAN (Powered by VERITY MoE)
+> **Team:** THE MOE
+> **Backend Owner:** Divy Mishra
+> **Frontend Owner:** Lavanya Bani
+> **Current Development Focus:** Round 2 End-to-End Integration
 
-## 2. Incomplete / Planned for Subsequent Sessions
-* Frontend workspace UI in `frontend/` (Owned by Lavanya Bani).
-* Custom Brand Rule / Approved Fact creation endpoints (`POST /api/brand/rules`, `POST /api/brand/facts`) and SQLite/PostgreSQL persistence across server restarts.
-* Optional `VisualGuard` static-image palette/contrast endpoint and optional cloud LLM adapter implementation.
+---
 
-# MoE-GUARDIAN — Project State (Session 2 Complete)
+## 1. Project Overview
 
-## 1. Implemented & Verified in Sessions 1 & 2
-* **FastAPI & Unified Contracts:** Strict orthogonal Pydantic v2 schemas (`backend/app/schemas/contracts.py`) and synchronized TypeScript interfaces (`shared/contracts.ts`).
-* **SQLAlchemy 2.x Persistence (`backend/app/core/database.py`, `backend/app/models/orm_models.py`, `backend/app/repositories/governance_repo.py`):** Persistent storage for `BrandRuleModel`, `ApprovedFactModel`, `AuditRecordModel`, `AuditFindingModel`, and `ReviewSnapshotModel` with SQLite foreign-key enforcement, idempotent demo seeding, and transaction rollback.
-* **Brand Ingestion APIs (`POST /api/brand/rules`, `POST /api/brand/facts`):** Validated custom rule and fact ingestion with `409 Conflict` duplicate protection and immediate availability in subsequent audits.
-* **Deterministic Specialist Engines:**
-  * `RuleGuard`: Banned terms, brand casing (`AURORAGEAR`), mandatory disclaimers, and discount bounds.
-  * `ClaimGuard` Baseline: 4-state claim verification (`SUPPORTED`, `PARTIAL`, `CONTRADICTED`, `UNVERIFIABLE`) and fail-closed Rewrite Validation Coordinator.
-  * `VisualGuard` Baseline: Static PNG/JPEG validation, 5 MB size cap, 16 MP decompression-bomb protection, CIEDE2000 ($\Delta E$) brand palette comparison, `alt_text` check, and WCAG relative-luminance contrast (with `INSUFFICIENT_DATA` escalation when foreground/background regions cannot be reliably isolated).
-* **Hardened HMAC-SHA256 Review Snapshots:** Canonical snapshot signing covering `review_notes`, chained via `previous_snapshot_hmac` in persistent storage, with cryptographic tamper verification (`VerityMoEOrchestrator.verify_snapshot_hmac`).
-* **Automated Test Suite:** **27 passing Pytest tests** across 4 test modules using isolated temporary SQLite databases (`backend/tests/conftest.py`).
+MoE-GUARDIAN is a pre-publication brand-governance and compliance system.
 
-## 2. Remaining Work for Subsequent Sessions
-* **Session 3 (Frontend & End-to-End User Workflow):** Connect `frontend/` UI to the Session 2 backend endpoints (`GET /api/demo/workspace`, `GET/POST /api/brand/rules`, `GET/POST /api/brand/facts`, `POST /api/audits`, `POST /api/audits/{audit_id}/review`).
-* **Session 4 (Deployment & Hardening):** Public cloud deployment (Vercel + Render/Railway) and Round 2 submission package verification.
+It evaluates marketing content against brand rules, approved facts, visual requirements, tone guidelines, and human approval workflows.
+
+The system uses the VERITY MoE orchestration layer to coordinate specialist governance engines.
+
+Core components:
+
+- RuleGuard
+- ClaimGuard
+- VisualGuard
+- VoiceGuard
+- RewriteValidationCoordinator
+- Maker-Checker Review Workflow
+- HMAC-SHA256 Review Snapshots
+- Compliance Export
+
+---
+
+## 2. Session 1 — Foundation
+
+### Implemented
+
+- Runnable FastAPI application.
+- CORS configuration and Swagger documentation.
+- Unified Pydantic v2 data contracts.
+- Matching TypeScript interfaces.
+- Deterministic RuleGuard engine.
+- Baseline ClaimGuard engine.
+- Canonical document-block anchoring.
+- Maker-Checker review-state enforcement.
+- HMAC-SHA256 audit snapshot signing.
+
+### Important Files
+
+- `backend/app/main.py`
+- `backend/app/api/routes.py`
+- `backend/app/schemas/contracts.py`
+- `backend/app/engines/rule_guard.py`
+- `backend/app/engines/claim_guard.py`
+- `backend/app/services/anchoring.py`
+- `backend/app/services/orchestrator.py`
+- `shared/contracts.ts`
+
+### Testing
+
+Initial reported result:
+
+**8 automated Pytest tests passing.**
+
+---
+
+## 3. Session 2 — Persistence & Governance Foundation
+
+### 3.1 SQLAlchemy Persistence
+
+Implemented SQLAlchemy 2.x persistence through:
+
+- `backend/app/core/database.py`
+- `backend/app/models/orm_models.py`
+- `backend/app/repositories/governance_repo.py`
+
+Documented persistent models:
+
+- `BrandRuleModel`
+- `ApprovedFactModel`
+- `AuditRecordModel`
+- `AuditFindingModel`
+- `ReviewSnapshotModel`
+
+Additional database behaviour:
+
+- SQLite foreign-key enforcement.
+- Idempotent demo seeding.
+- Transaction rollback.
+- Persistent governance records.
+
+### 3.2 Brand Rule & Fact APIs
+
+Implemented:
+
+- `POST /api/brand/rules`
+- `POST /api/brand/facts`
+
+Capabilities:
+
+- Custom rule creation.
+- Approved-fact creation.
+- Duplicate protection.
+- Availability of newly ingested records to subsequent audits.
+
+### 3.3 VisualGuard Baseline
+
+Implemented static-image governance capabilities:
+
+- PNG/JPEG validation.
+- 5 MB image-size limit.
+- 16 MP decompression-bomb protection.
+- CIEDE2000 (ΔE) brand-palette comparison.
+- Alternative-text validation.
+- WCAG relative-luminance contrast checks.
+- Insufficient-data escalation for uncertain visual regions.
+
+### 3.4 HMAC Review Snapshots
+
+Implemented:
+
+- Canonical review snapshot signing.
+- Review-note inclusion in the signed payload.
+- Persistent snapshot storage.
+- Previous-snapshot HMAC chaining.
+- Snapshot tamper verification.
+
+### 3.5 Session 2 Testing
+
+Original Session 2 checkpoint:
+
+**27 Pytest tests passing** across four test modules, as recorded in the original project-state document.
+
+---
+
+## 4. Subsequent Development — Task 1
+
+### Brand Constitution Ingestion
+
+Documented implementation:
+
+- PDF guideline upload.
+- PyMuPDF-based text extraction.
+- PromptShield isolation of untrusted extracted text.
+- Candidate-rule staging.
+- Explicit confirmation workflow.
+
+Endpoints:
+
+- `POST /api/brand/guidelines/upload-pdf`
+- `POST /api/brand/guidelines/{batch_id}/confirm`
+
+Candidate rules enter:
+
+`PENDING_CONFIRMATION`
+
+They become active only after confirmation.
+
+### Approved Facts CSV
+
+Implemented endpoint:
+
+`POST /api/brand/facts/upload-csv`
+
+Documented capabilities:
+
+- CSV validation.
+- Required-column checks.
+- Duplicate and malformed row reporting.
+- Structured `row_errors`.
+- Tenant-scoped fact persistence.
+
+### Brand Palette APIs
+
+Implemented endpoints:
+
+- `GET /api/brand/palette`
+- `POST /api/brand/palette`
+
+The palette supports VisualGuard colour comparison.
+
+### Testing Checkpoint
+
+User-reported Task 1 result:
+
+**36/36 tests passing.**
+
+---
+
+## 5. Subsequent Development — Task 2
+
+### VoiceGuard
+
+Documented capabilities:
+
+- Tone and messaging analysis.
+- On-demand rewrite generation.
+- Intent-preserving rewrite suggestions.
+
+### RewriteValidationCoordinator
+
+Implemented workflow:
+
+- Candidate rewrite validation.
+- RuleGuard revalidation.
+- Conditional ClaimGuard revalidation.
+- Fail-closed validation behaviour.
+- Prevention of recursive VoiceGuard calls.
+
+Endpoint:
+
+`POST /api/audits/{audit_id}/findings/{finding_id}/rewrite`
+
+### Testing Checkpoint
+
+User-reported Task 2 result:
+
+**47/47 tests passing.**
+
+---
+
+## 6. Sprint 1 — Tenant Authentication & Security Hardening
+
+Subsequent implementation notes document:
+
+- HS256 JWT verification.
+- Tenant context resolution.
+- Organisation membership lookup.
+- Server-side role resolution.
+- Multi-membership organisation selection.
+- Role-spoofing prevention.
+- PostgreSQL RLS migration files.
+
+Authentication endpoint:
+
+`GET /api/auth/me`
+
+Documented tenant context:
+
+- `user_id`
+- `org_id`
+- `role`
+- `is_demo_fallback`
+- `auth_mode`
+
+### Testing Checkpoint
+
+User-reported authentication test result:
+
+**55/55 tests passing.**
+
+### Verification Boundary
+
+SQLite-based tests do not execute PostgreSQL RLS policies.
+
+PostgreSQL integration testing and cross-tenant isolation verification remain separate validation requirements.
+
+---
+
+## 7. Sprint 2 — VisualGuard OCR Integration
+
+Subsequent implementation notes document Tesseract OCR integration.
+
+Important implementation area:
+
+`backend/app/services/ocr_service.py`
+
+Documented capabilities:
+
+- OCR text extraction.
+- Bounding-box and confidence information.
+- Confidence-threshold handling.
+- Treatment of extracted text as untrusted input.
+- Routing eligible OCR text through governance checks.
+- Insufficient-data escalation for low-confidence or unavailable OCR.
+
+### Testing Checkpoint
+
+User-reported OCR test result:
+
+**64/64 tests passing.**
+
+### Remaining Boundary
+
+OCR text extraction does not guarantee semantic correctness or reliable foreground/background colour separation.
+
+---
+
+## 8. Sprint 3 — Compliance Export & HMAC Hardening
+
+Subsequent implementation notes document:
+
+### HMAC Key Rotation
+
+- Active key identification through `HMAC_KEY_ID`.
+- Retired-key configuration through `HMAC_RETIRED_KEYS`.
+- Historical snapshot verification.
+- Signature verification.
+- Hash-chain continuity checking.
+
+### Snapshot Verification
+
+Endpoint:
+
+`GET /api/audits/{audit_id}/verify-snapshot`
+
+### Compliance Export
+
+Endpoint:
+
+`GET /api/audits/{audit_id}/export`
+
+Documented export components:
+
+- Machine findings.
+- Human review decision.
+- Snapshot integrity.
+- AI disclosure information.
+- Simulated CMS payload.
+
+The simulated CMS payload is gated by approval and snapshot-integrity conditions.
+
+### Testing Checkpoint
+
+User-reported final regression result:
+
+**69/69 tests passing.**
+
+This is the latest reported automated test checkpoint.
+
+It does not independently establish production deployment, PostgreSQL RLS enforcement, or complete frontend integration.
+
+---
+
+## 9. Current Backend Capability Inventory
+
+The following capabilities are documented as implemented in the current project state:
+
+| Component | Documented Capability |
+|---|---|
+| FastAPI | Backend API application |
+| Pydantic v2 | Structured request/response contracts |
+| SQLAlchemy 2.x | Persistent governance records |
+| RuleGuard | Deterministic brand-policy checks |
+| ClaimGuard | Baseline claim verification |
+| VisualGuard | Static-image validation |
+| VoiceGuard | Tone and rewrite functionality |
+| PromptShield | Isolation of untrusted guideline text |
+| PDF Ingestion | Guideline extraction and confirmation |
+| CSV Ingestion | Approved-fact import |
+| Tenant Context | Authentication and organisation resolution |
+| HMAC | Signed review snapshots and verification |
+| Compliance Export | Structured governance export |
+
+---
+
+## 10. Remaining Work — Session 3
+
+### Frontend Integration & End-to-End Workflow
+
+**Status: Pending completion.**
+
+Frontend development is owned by Lavanya Bani.
+
+The existing React/TypeScript frontend must be connected to the latest backend implementation.
+
+Integration scope:
+
+- Workspace loading.
+- Authentication and tenant context.
+- Brand rules.
+- Approved facts.
+- PDF guideline upload and confirmation.
+- CSV facts upload.
+- Brand palette management.
+- Canonical block editor.
+- Audit creation.
+- Inline findings.
+- On-demand rewrite workflow.
+- Maker-Checker review.
+- Snapshot verification.
+- Compliance export.
+
+### Frontend Integration Requirements
+
+- Synchronize TypeScript contracts with backend Pydantic schemas.
+- Correct API base URL configuration.
+- Integrate authentication headers.
+- Handle structured backend errors.
+- Preserve document block IDs.
+- Handle stale findings and document revisions.
+- Replace mock-dependent production behaviour with real API calls.
+
+---
+
+## 11. Remaining Work — Session 4
+
+### Deployment & Production Hardening
+
+**Status: Pending completion.**
+
+Planned deployment targets:
+
+- Frontend: Vercel.
+- Backend: Render or Railway.
+- Database: PostgreSQL.
+
+Required work:
+
+- Configure production environment variables.
+- Configure CORS.
+- Configure authentication secrets.
+- Configure database connectivity.
+- Validate tenant isolation.
+- Configure native Tesseract dependencies.
+- Configure HMAC signing keys.
+- Run live deployment smoke tests.
+- Verify public application accessibility.
+- Test the application in an incognito browser session.
+
+---
+
+## 12. Round 3 — Planned Improvements
+
+The following improvements are roadmap items and must not be represented as completed until implemented and tested.
+
+### Improvement 01 — Advanced Claim Verification
+
+Planned scope:
+
+- Structured numeric units.
+- Numeric ranges and comparators.
+- Locale-aware numeric interpretation.
+- Testing-condition qualifiers.
+- Expiry and validity conditions.
+- Contradiction detection across documents.
+
+### Improvement 02 — Advanced Visual Understanding
+
+Planned scope:
+
+- Multi-page PDF and carousel analysis.
+- Supplementary CLIP-based semantic similarity.
+- More advanced visual-content evaluation.
+
+### Improvement 03 — Advanced Governance Intelligence
+
+Planned scope includes improvements such as:
+
+- Guideline ambiguity signalling.
+- Upload-time conflict detection.
+- Advanced multi-stage privacy redaction.
+
+The final scope must remain aligned with the original Round 1 proposal.
+
+---
+
+## 13. Project Completion Criteria
+
+The Round 2 core workflow is considered complete only after:
+
+- [ ] Backend APIs are integrated with the frontend.
+- [ ] Guideline ingestion and confirmation work end-to-end.
+- [ ] Approved facts can be created and imported.
+- [ ] Brand palette management works.
+- [ ] Document audits return usable findings.
+- [ ] Rewrite suggestions are validated by the backend.
+- [ ] Human review and approval work correctly.
+- [ ] HMAC snapshot verification works.
+- [ ] Compliance export works.
+- [ ] Tenant authentication and isolation are validated.
+- [ ] Frontend and backend pass end-to-end integration tests.
+- [ ] Public deployment is accessible and verified.
+
+---
+
+**End of Project State Document**

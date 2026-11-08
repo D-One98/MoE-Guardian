@@ -12,10 +12,9 @@ from app.schemas.contracts import (
     EvidenceReference,
     EngineExecutionRecord,
     RewriteCandidate,
-    BackendRevalidationResult,
 )
 from app.services.anchoring import resolve_block_text_anchor
-from app.engines.rule_guard import run_rule_guard
+from app.services.rewrite_coordinator import validate_rewrite_candidate
 
 
 def _build_fact_evidence(fact: ApprovedFact) -> EvidenceReference:
@@ -129,30 +128,13 @@ def build_revalidated_rewrite_candidate(
     rules: List[BrandRule],
     facts: List[ApprovedFact],
 ) -> RewriteCandidate:
-    temp_block = [ContentBlock(document_block_id="blk-rewrite-check", text=suggested_text)]
-    rg_findings, rg_exec = run_rule_guard(temp_block, rules)
-    cg_status, _, _ = _evaluate_sentence_against_fact(suggested_text, fact)
-
-    revalidation_passed = (
-        rg_exec.execution_state == ExecutionState.OK
-        and len(rg_findings) == 0
-        and cg_status == VerificationStatus.SUPPORTED
-    )
-
-    return RewriteCandidate(
+    return validate_rewrite_candidate(
         candidate_id=candidate_id,
         suggested_text=suggested_text,
-        backend_revalidation=BackendRevalidationResult(
-            assigned_by="BACKEND_COORDINATOR",
-            executed_checks={
-                "RuleGuard_execution_state": rg_exec.execution_state.value,
-                "RuleGuard_violations_count": len(rg_findings),
-                "ClaimGuard_execution_state": ExecutionState.OK.value,
-                "VoiceGuard_recursive_call": "SKIPPED_BY_DESIGN",
-            },
-            candidate_verification_status=cg_status,
-            revalidation_passed=revalidation_passed,
-        ),
+        rules=rules,
+        facts=facts,
+        original_finding_type=FindingType.FACTUAL_CLAIM,
+        original_matched_text=fact.canonical_text,
     )
 
 
@@ -160,6 +142,7 @@ def run_claim_guard_baseline(
     blocks: List[ContentBlock],
     facts: List[ApprovedFact],
     rules: List[BrandRule],
+    generate_rewrites: bool = True,
 ) -> Tuple[List[UnifiedFinding], EngineExecutionRecord]:
     findings: List[UnifiedFinding] = []
     finding_counter = 1
@@ -206,7 +189,7 @@ def run_claim_guard_baseline(
                 rewrite_cand: Optional[RewriteCandidate] = None
                 human_req = v_status != VerificationStatus.SUPPORTED
 
-                if v_status in (VerificationStatus.PARTIAL, VerificationStatus.CONTRADICTED):
+                if generate_rewrites and v_status in (VerificationStatus.PARTIAL, VerificationStatus.CONTRADICTED):
                     rewrite_cand = build_revalidated_rewrite_candidate(
                         candidate_id=f"RW-CG-{finding_counter:04d}",
                         suggested_text=matched_fact.canonical_text,
@@ -248,7 +231,7 @@ def run_claim_guard_baseline(
     except Exception as exc:
         return [], EngineExecutionRecord(
             expert_engine="ClaimGuard",
-            mandatory_enforced=True,
+            mandatory_enforced=False,
             execution_state=ExecutionState.ERROR,
             findings_count=0,
             notes=f"ClaimGuard execution error: {type(exc).__name__}",

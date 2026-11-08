@@ -3,6 +3,42 @@ from app.schemas.contracts import BrandRule, RuleCategory, Severity, ApprovedFac
 
 DEMO_ORG_ID = "ORG-SAMPLE-DEMO-01"
 DEMO_ORG_NAME = "Sample Demo Brand (AuroraGear — Fictional Evaluation Dataset)"
+DEMO_BRAND_PALETTE: List[Dict[str, Any]] = [
+    {
+        "palette_id": "PAL-NAVY-001",
+        "name": "Aurora Deep Navy",
+        "hex": "#0F172A",
+        "rgb": (15, 23, 42),
+        "max_delta_e": 15.0,
+        "document_id": "DOC-BRAND-CONSTITUTION-V1",
+        "document_name": "Sample_Brand_Guidelines_v1.pdf",
+        "verified_page_or_row": 6,
+    },
+    {
+        "palette_id": "PAL-SLATE-002",
+        "name": "Aurora Technical Slate",
+        "hex": "#334155",
+        "rgb": (51, 65, 85),
+        "max_delta_e": 15.0,
+        "document_id": "DOC-BRAND-CONSTITUTION-V1",
+        "document_name": "Sample_Brand_Guidelines_v1.pdf",
+        "verified_page_or_row": 6,
+    },
+    {
+        "palette_id": "PAL-WHITE-003",
+        "name": "Aurora Crisp White",
+        "hex": "#FFFFFF",
+        "rgb": (255, 255, 255),
+        "max_delta_e": 12.0,
+        "document_id": "DOC-BRAND-CONSTITUTION-V1",
+        "document_name": "Sample_Brand_Guidelines_v1.pdf",
+        "verified_page_or_row": 6,
+    },
+]
+
+
+def get_demo_brand_palette() -> List[Dict[str, Any]]:
+    return DEMO_BRAND_PALETTE
 
 
 def get_demo_brand_rules() -> List[BrandRule]:

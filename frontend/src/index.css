@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    @apply bg-[#09090B] text-zinc-100 antialiased selection:bg-emerald-500/30 selection:text-emerald-200;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Custom Animations for the 4-Quadrant Convergence Prism Logo */
+@keyframes prism-rotate-assembly {
+  0% {
+    transform: rotate(0deg) scale(0.96);
+  }
+
+  45% {
+    transform: rotate(90deg) scale(1.04);
+  }
+
+  85%,
+  100% {
+    transform: rotate(180deg) scale(0.96);
+  }
+}
+
+@keyframes quad-tl {
+
+  0%,
+  85%,
+  100% {
+    transform: translate(0px, 0px);
+  }
+
+  40%,
+  50% {
+    transform: translate(-11px, -11px);
+  }
+}
+
+@keyframes quad-tr {
+
+  0%,
+  85%,
+  100% {
+    transform: translate(0px, 0px);
+  }
+
+  40%,
+  50% {
+    transform: translate(11px, -11px);
+  }
+}
+
+@keyframes quad-br {
+
+  0%,
+  85%,
+  100% {
+    transform: translate(0px, 0px);
+  }
+
+  40%,
+  50% {
+    transform: translate(11px, 11px);
+  }
+}
+
+@keyframes quad-bl {
+
+  0%,
+  85%,
+  100% {
+    transform: translate(0px, 0px);
+  }
+
+  40%,
+  50% {
+    transform: translate(-11px, 11px);
+  }
+}
+
+@keyframes core-pulse {
+
+  0%,
+  80%,
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+
+  45% {
+    transform: scale(0.72) rotate(-45deg);
+    opacity: 0.65;
+  }
+}
+
+.animate-prism-assembly {
+  animation: prism-rotate-assembly 2.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+.animate-quad-tl {
+  animation: quad-tl 2.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+.animate-quad-tr {
+  animation: quad-tr 2.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+.animate-quad-br {
+  animation: quad-br 2.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+.animate-quad-bl {
+  animation: quad-bl 2.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+.animate-core-pulse {
+  transform-origin: center;
+  animation: core-pulse 2.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}

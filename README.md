@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="assets/the-moe-logo.png" alt="THE MOE logo" width="112" />
+<img src="assets/MoE-Guardian.png" alt="THE MoE-Gaurdian logo" width="112" /></IMG>
 
-# MoE-GUARDIAN
+# **MoE-GUARDIAN**
 
 ### Trust Every Claim. Govern Every Brand. Approve with Confidence.
 
@@ -200,7 +200,11 @@ The Round 2 report names these as future improvements. They should be treated as
 
 The report also places native CMS/design integrations, self-hosted or air-gapped model serving, external append-only audit anchoring, and video/audio review in future scope. None are claimed as current Round 2 capabilities.
 
-## Team THE MOE
+----------
+
+<img src="assets/the-moe-logo.png" alt="THE MOE" width="112" /></IMG> 
+
+## Team: THE MOE  
 
 | Member | Documented role | Project contribution |
 |---|---|---|
@@ -216,6 +220,6 @@ These are playful, non-technical shout-outs based only on the roles documented a
 
 <div align="center">
 
-**THE MOE · MoE-GUARDIAN · SIUUUU**
+**THE MOE · MoE-GUARDIAN**
 
 </div>

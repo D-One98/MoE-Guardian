@@ -68,19 +68,19 @@ export async function fetchDemoWorkspaceService(): Promise<Record<string, unknow
 // 4 & 5. GET / POST /api/brand/rules
 export async function listBrandRulesService(): Promise<BrandRule[]> {
   if (FORCE_MOCK_MODE) return MOCK_BRAND_RULES;
-  try {
-    return await apiRequest<BrandRule[]>('/brand/rules');
-  } catch {
-    return MOCK_BRAND_RULES;
-  }
+
+  const res = await apiRequest<{ rules: BrandRule[] }>('/brand/rules');
+  return res.rules;
 }
 
 export async function createBrandRuleService(rule: BrandRule): Promise<BrandRule> {
   if (FORCE_MOCK_MODE) return rule;
-  return apiRequest<BrandRule>('/brand/rules', {
+
+  const res = await apiRequest<{ rule: BrandRule }>('/brand/rules', {
     method: 'POST',
     body: JSON.stringify(rule),
   });
+  return res.rule;
 }
 
 // 6 & 7. POST /api/brand/guidelines/upload-pdf & /{batch_id}/confirm
@@ -108,21 +108,21 @@ export async function confirmGuidelineRulesService(
 // 8, 9 & 10. GET / POST /api/brand/facts & /upload-csv
 export async function listApprovedFactsService(): Promise<ApprovedFact[]> {
   if (FORCE_MOCK_MODE) return MOCK_APPROVED_FACTS;
-  try {
-    return await apiRequest<ApprovedFact[]>('/brand/facts');
-  } catch {
-    return MOCK_APPROVED_FACTS;
-  }
+
+  const res = await apiRequest<{ facts: ApprovedFact[] }>('/brand/facts');
+  return res.facts;
 }
 
 export async function createApprovedFactService(
   fact: ApprovedFact
 ): Promise<ApprovedFact> {
   if (FORCE_MOCK_MODE) return fact;
-  return apiRequest<ApprovedFact>('/brand/facts', {
+
+  const res = await apiRequest<{ fact: ApprovedFact }>('/brand/facts', {
     method: 'POST',
     body: JSON.stringify(fact),
   });
+  return res.fact;
 }
 
 export async function uploadApprovedFactsCsvService(
@@ -135,21 +135,21 @@ export async function uploadApprovedFactsCsvService(
 // 11 & 12. GET / POST /api/brand/palette
 export async function listBrandPaletteService(): Promise<BrandPaletteItem[]> {
   if (FORCE_MOCK_MODE) return MOCK_BRAND_PALETTE;
-  try {
-    return await apiRequest<BrandPaletteItem[]>('/brand/palette');
-  } catch {
-    return MOCK_BRAND_PALETTE;
-  }
+
+  const res = await apiRequest<{ palette: BrandPaletteItem[] }>('/brand/palette');
+  return res.palette;
 }
 
 export async function createBrandPaletteService(
   item: BrandPaletteItem
 ): Promise<BrandPaletteItem> {
   if (FORCE_MOCK_MODE) return item;
-  return apiRequest<BrandPaletteItem>('/brand/palette', {
+
+  const res = await apiRequest<{ palette_item: BrandPaletteItem }>('/brand/palette', {
     method: 'POST',
     body: JSON.stringify(item),
   });
+  return res.palette_item;
 }
 
 // 13 & 14. POST /api/audits & GET /api/audits/{audit_id}
@@ -162,14 +162,11 @@ export async function runAuditService(
       setTimeout(() => resolve(createMockAudit(req, computedRevisionHash)), 1200);
     });
   }
-  try {
-    return await apiRequest<AuditResponse>('/audits', {
-      method: 'POST',
-      body: JSON.stringify(req),
-    });
-  } catch {
-    return createMockAudit(req, computedRevisionHash);
-  }
+
+  return apiRequest<AuditResponse>('/audits', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
 }
 
 export async function getAuditByIdService(auditId: string): Promise<AuditResponse> {
@@ -185,17 +182,14 @@ export async function requestOnDemandRewriteService(
   if (FORCE_MOCK_MODE) {
     return generateMockOnDemandRewrite(currentAudit, findingId, req);
   }
-  try {
-    return await apiRequest<OnDemandRewriteResponse>(
-      `/audits/${currentAudit.audit_id}/findings/${findingId}/rewrite`,
-      {
-        method: 'POST',
-        body: JSON.stringify(req),
-      }
-    );
-  } catch {
-    return generateMockOnDemandRewrite(currentAudit, findingId, req);
-  }
+
+  return apiRequest<OnDemandRewriteResponse>(
+    `/audits/${currentAudit.audit_id}/findings/${findingId}/rewrite`,
+    {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }
+  );
 }
 
 // 16. POST /api/audits/{audit_id}/review
@@ -206,19 +200,15 @@ export async function submitReviewDecisionService(
   if (FORCE_MOCK_MODE) {
     return submitMockReviewDecision(currentAudit, req);
   }
-  try {
-    return await apiRequest<AuditResponse>(
-      `/audits/${currentAudit.audit_id}/review`,
-      {
-        method: 'POST',
-        body: JSON.stringify(req),
-      }
-    );
-  } catch {
-    return submitMockReviewDecision(currentAudit, req);
-  }
-}
 
+  return apiRequest<AuditResponse>(
+    `/audits/${currentAudit.audit_id}/review`,
+    {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }
+  );
+}
 // 17. GET /api/audits/{audit_id}/verify-snapshot
 export async function verifySnapshotService(
   currentAudit: AuditResponse
@@ -226,15 +216,11 @@ export async function verifySnapshotService(
   if (FORCE_MOCK_MODE) {
     return verifyMockSnapshot(currentAudit);
   }
-  try {
-    return await apiRequest<SnapshotVerificationResponse>(
-      `/audits/${currentAudit.audit_id}/verify-snapshot`
-    );
-  } catch {
-    return verifyMockSnapshot(currentAudit);
-  }
-}
 
+  return apiRequest<SnapshotVerificationResponse>(
+    `/audits/${currentAudit.audit_id}/verify-snapshot`
+  );
+}
 // 18. GET /api/audits/{audit_id}/export
 export async function exportAuditComplianceService(
   currentAudit: AuditResponse
@@ -242,11 +228,8 @@ export async function exportAuditComplianceService(
   if (FORCE_MOCK_MODE) {
     return buildMockComplianceExport(currentAudit);
   }
-  try {
-    return await apiRequest<ComplianceExportResponse>(
-      `/audits/${currentAudit.audit_id}/export`
-    );
-  } catch {
-    return buildMockComplianceExport(currentAudit);
-  }
+
+  return apiRequest<ComplianceExportResponse>(
+    `/audits/${currentAudit.audit_id}/export`
+  );
 }

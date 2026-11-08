@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/the-moe-logo.svg" alt="THE MOE logo" width="112" />
+<img src="assets/the-moe-logo.png" alt="THE MOE logo" width="112" />
 
 # MoE-GUARDIAN
 
